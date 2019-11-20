@@ -7,6 +7,7 @@ use Spreadsheet::ParseXLSX;
 use Carp;
 use Excel::Writer::XLSX;
 use utf8;
+use open ':std', ':encoding(UTF-8)';
 
 my $file = $ARGV[0];
 
@@ -16,12 +17,15 @@ my $result_data = {};
 my $result_file = "Result.xlsx";
 my $result_sheet_name = 'Result';
 my $rows_to_proces = 10;
+my $column_to_read = 8;
 
 ##############
 
 my $parser =   Spreadsheet::ParseXLSX->new();
 
+say "\n#################################";
 say "Parse file[$file]";
+say "###################################\n";
 
 my $workbook = $parser->parse($file);
  
@@ -42,26 +46,31 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 			  my $cell = $worksheet->get_cell( $row, $col );
 			  next unless $cell;
 
-			  if ($col eq 8 ) {
+			  if ($col eq $column_to_read ) {
 				  $counter++;
-				  say "Row[$row] col[$col]"; 
+				  #say "Row[$row] col[$col]"; 
 				  my $val = $cell->value();
 				  my $old_value = $val;
-				  say "before func[$val]";
+				  #say "before func[$val]";
+				  my $initial_string = $val;
+				  my ($uni_count, $abbr_count );
 
 				  $val = trim($val);
 				  $val = rem_spaces($val);
 				  $val = case($val);
-				  $val = abriviation($val);
-				  $val = unification($val);
 
-				  say "after[$val]";
-				  say "\n";
+				  ($val, $abbr_count ) = abriviation($val);
+				  ($val, $uni_count ) = unification($val);
+
+				
+				  say "[$initial_string] ---> [$val]";
 
 				  $result_data->{$row}{new_value} = $val;
 				  $result_data->{$row}{old_value} = $old_value;
 				  $result_data->{$row}{row_num} = $row + 1;
 				  $result_data->{$row}{col_num} = 2;
+				  $result_data->{$row}{abbr} = $abbr_count;
+				  $result_data->{$row}{uni} = $uni_count;
 
 
 
@@ -72,12 +81,13 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 				  $result_data->{$row}{id} = $id;
 
 			  }
+			  
 			  last ROW_NUM if $counter > $rows_to_proces;
 		  }
 	  }
 }
 
-
+say "\nAbout to write data in file[$result_file] with sheet[$result_sheet_name]\n";
 write_down( $result_file, $result_sheet_name , $result_data );
 
 ########################
@@ -98,6 +108,8 @@ sub write_down {
 	$worksheet->write( 0 , 0 , "ID" );
 	$worksheet->write( 0 , 1 , "OLD_VALUE" );
 	$worksheet->write( 0 , 2 , "NEW_VALUE" );
+	$worksheet->write( 0 , 3 , "abbr" );
+	$worksheet->write( 0 , 4 , "uni" );
 
 	for my $row_in ( %{$new_excel_data} ) {
 		next if ref $row_in; 	
@@ -106,6 +118,9 @@ sub write_down {
 		my $new_value = $new_excel_data->{$row_in}{new_value};
 		my $id = $new_excel_data->{$row_in}{id};
 		my $old_value = $new_excel_data->{$row_in}{old_value};
+		my $uni_count = $new_excel_data->{$row_in}{uni};
+		my $abbr_count = $new_excel_data->{$row_in}{abbr};
+
 	#say "In write_down() row_in[$row_in] row[$row] col[$col] new_value[$new_value]";
 
 		#ID
@@ -114,6 +129,10 @@ sub write_down {
 		$worksheet->write( $row, 1, $old_value );
 		#nEW_value	
 		$worksheet->write( $row, $col, $new_value );
+		#abbr
+		$worksheet->write( $row, $col + 1, $abbr_count );
+		#uni
+		$worksheet->write( $row, $col + 2 , $uni_count );
 	}	
 
 	$workbook->close();
@@ -157,6 +176,7 @@ sub case {
 sub abriviation {
 ####################
 	my $input_value  = shift;
+	my $matched;
 
 	my $abbrs = {
 
@@ -197,16 +217,20 @@ sub abriviation {
 		'Проф.' => 'проф.',
 		'Д-Р' => 'д-р',
 
-	};
+	};	
 
 	for my $abbr_key ( keys %{$abbrs} ) {	
 		my $abbr_value = $abbrs->{$abbr_key};
 		#say "about to replase[$abbr_key] to [$abbr_value]";
+		if ($input_value =~ /\Q$abbr_key\E/i ) {
+			$matched++;
+		}
+
 		$input_value =~ s/\Q$abbr_key\E/$abbr_value/gi;
 	}
 
-	#say "result of abriviation() [$input_value]";
-	return $input_value;
+	#say "result of abriviation() [$input_value] matched[$matched]";
+	return $input_value, $matched;
 
 }
 
@@ -214,6 +238,8 @@ sub abriviation {
 sub unification {
 #####################
 	my $input_value = shift;
+	my $matched;
+
 	my $uni_list  = {
 		'Алек.*?Стамб[^\s]*' => 'Александър Стамболийски',
 		'Нико.*?Миха[^\s]*' => 'Никола Михайловски',
@@ -226,10 +252,15 @@ sub unification {
 	for my $abbr_key ( keys %{$uni_list} ) {	
 		my $abbr_value = $uni_list->{$abbr_key};
 		#say "input_value[$input_value] about to replase[$abbr_key] to [$abbr_value]";
+		if ( $input_value =~ /$abbr_key/i ) {
+			$matched++;
+		}
+
 		$input_value =~ s/$abbr_key/$abbr_value/i;
 	}
 
-	return $input_value;
+	
+	return $input_value, $matched;
 
 }
 
