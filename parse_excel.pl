@@ -6,113 +6,135 @@ use 5.10.1;
 use Spreadsheet::ParseXLSX;
 use Carp;
 use Excel::Writer::XLSX;
-
+use utf8;
 
 my $file = $ARGV[0];
 
-
 confess "You must give an file name as first parameter" unless $file;
-my $result_data = {};
-# my $result->{1} = {
-#	          old_value =>'iasdasd', 
-#		  new_value => "asdasd123123" ,
-#		  id => '123123', 
-#		  row_num => '1',
-#		  col_num => '2' #HARD CODED
-#		  #ID col 0, 
-#		  #OLD_VALUE col 1
-#                 };
 
+my $result_data = {};
 my $result_file = "Result.xlsx";
+my $result_sheet_name = 'Result';
+my $rows_to_proces = 10;
 
 ##############
 
 my $parser =   Spreadsheet::ParseXLSX->new();
-#my $parser   = Spreadsheet::ParseExcel->new();
+
 say "Parse file[$file]";
+
 my $workbook = $parser->parse($file);
  
 if ( !defined $workbook ) {
     confess $parser->error() .  ".\n";
 }
 
-
-my $counter;
+my $counter = 0;
 
 
 for my $worksheet ( $workbook->worksheets() ) {
-	say "show me worksheet name[$worksheet]"; 
 	my ( $row_min, $row_max ) = $worksheet->row_range();
 	my ( $col_min, $col_max ) = $worksheet->col_range();
 
 ROW_NUM:  for my $row ( $row_min .. $row_max ) {
-		for my $col ( $col_min .. $col_max ) {
+		  for my $col ( $col_min .. $col_max ) {
 
-			my $cell = $worksheet->get_cell( $row, $col );
-			next unless $cell;
-				
-			if ($col eq 8 ) {
-				$counter++;
-				say "Row[$row] col[$col]"; 
-				my $val = $cell->value();
-				my $old_value = $val;
-				say "before func[$val]";
-                                $val = trim($val);
-				$val = rem_spaces($val);
-				$val = case($val);
-				#$val = abriviation($val);
-				say "after[$val]";
-				#say "Unformatted["  .  $cell->unformatted() . "]";
-                                say "\n";
-				
-                                $result_data->{$counter}{new_value} = $val;
+			  my $cell = $worksheet->get_cell( $row, $col );
+			  next unless $cell;
 
-                                $result_data->{$counter}{old_value} = $old_value;
-                                $result_data->{$counter}{row_num} = $row + 1;
-                                $result_data->{$counter}{col_num} = 2;
-				
-				
-			
-			}
+			  if ($col eq 8 ) {
+				  $counter++;
+				  say "Row[$row] col[$col]"; 
+				  my $val = $cell->value();
+				  my $old_value = $val;
+				  say "before func[$val]";
 
-			if ($col eq 1 ) {
-				my $id = $cell->value();
-                                $result_data->{$counter}{id} = $id;
-                           
-			}
-			last ROW_NUM if $counter > 10;
-		}
-	}
+				  $val = trim($val);
+				  $val = rem_spaces($val);
+				  $val = case($val);
+				  $val = abriviation($val);
+				  $val = unification($val);
+
+				  say "after[$val]";
+				  say "\n";
+
+				  $result_data->{$row}{new_value} = $val;
+				  $result_data->{$row}{old_value} = $old_value;
+				  $result_data->{$row}{row_num} = $row + 1;
+				  $result_data->{$row}{col_num} = 2;
+
+
+
+			  }
+
+			  if ($col eq 1 ) {
+				  my $id = $cell->value();
+				  $result_data->{$row}{id} = $id;
+
+			  }
+			  last ROW_NUM if $counter > $rows_to_proces;
+		  }
+	  }
 }
 
 
-write_down( $result_file, 'Result' , $result_data );
+write_down( $result_file, $result_sheet_name , $result_data );
 
-######################
-sub transliterate {
-######################
-      my $value = shift;
-      	
+########################
+sub write_down { 
+########################
+	my $file = shift;
+	my $sheet_name = shift;
+	my $new_excel_data = shift;
+	#say "show entire data" . Dumper $new_excel_data;	
 
+
+	my $workbook = Excel::Writer::XLSX->new( $file );
+
+	# Add a worksheet
+	my $worksheet = $workbook->add_worksheet($sheet_name);
+
+	#Make headers
+	$worksheet->write( 0 , 0 , "ID" );
+	$worksheet->write( 0 , 1 , "OLD_VALUE" );
+	$worksheet->write( 0 , 2 , "NEW_VALUE" );
+
+	for my $row_in ( %{$new_excel_data} ) {
+		next if ref $row_in; 	
+		my $row = $new_excel_data->{$row_in}{row_num};
+		my $col = $new_excel_data->{$row_in}{col_num};
+		my $new_value = $new_excel_data->{$row_in}{new_value};
+		my $id = $new_excel_data->{$row_in}{id};
+		my $old_value = $new_excel_data->{$row_in}{old_value};
+	#say "In write_down() row_in[$row_in] row[$row] col[$col] new_value[$new_value]";
+
+		#ID
+		$worksheet->write( $row , 0, $id );
+		#OLD_value
+		$worksheet->write( $row, 1, $old_value );
+		#nEW_value	
+		$worksheet->write( $row, $col, $new_value );
+	}	
+
+	$workbook->close();
 }
 
 ################
 sub trim {
 	my $value = shift;
-           $value =~ s/^\s*//;
-           $value =~ s/\s*$//;
-           return $value;
+	$value =~ s/^\s*//;
+	$value =~ s/\s*$//;
+	return $value;
 }
 
 ###############
 sub rem_spaces {
 #############
 	my $value = shift;
-           $value =~ s/\s\s*/ /g; 
-           return $value;
-	
-}
+	$value =~ s/\s\s*/ /g; 
+	return $value;
 
+}
 
 #############
 sub case {
@@ -123,30 +145,68 @@ sub case {
 
 	for my $word ( @words) {
 
-	    $result .= ucfirst( lc($word) ) . ' ';
+		$result .= ucfirst( lc($word) ) . ' ';
 	}	
-		
+
 	return trim($result);
-	
+
 }
+
 
 ####################
 sub abriviation {
 ####################
 	my $input_value  = shift;
-# академик Иван Гeшoв , акдемик Иван Ге
+
 	my $abbrs = {
 
-		'академик' => 'акад.',
-		'генерал' => 'ген.',
+		' - ' => '-',
+		'-Т' => '-т',
+		'-Р' => '-р',
+		'-В' => '-в',
+		'-М' => '-м',
+		' И ' => ' и',
+		'Ii' => 'II',
+		'Iii' => 'III',
+		'Академик' => 'акад.',
+		'Архитект' => 'арх.',
+		'Генерал' => 'ген.',
+		'Доктор' => 'д-р',
+		'Доцент' => 'доц.',
+		'Инженер' => 'инж.',
+		'Капитан' => 'кап.',
+		'Майор' => 'м-р',
+		'Лейтенант' => 'лейт.',
+		'Подполковник' => 'подпл.',
+		'Подпоручик' => 'подпр.',
+		'Полковник' => 'полк.',
+		'Поручик' => 'прк.',
+		'Професор' => 'проф.',
+		'Акад.' => 'акад.',
+		'Арх.' => 'арх.',
+		'Ген.' => 'ген.',
+		'Доц.' => 'доц.',
+		'Инж.' => 'инж.',
+		'Кап.' => 'кап.',
+		'М-Р' => 'м-р',
+		'Лейт.' => 'лейт.',
+		'Подпл.' => 'подпл.',
+		'Подпр.' => 'подпр.',
+		'Полк.' => 'полк.',
+		'Прк.' => 'прк.',
+		'Проф.' => 'проф.',
+		'Д-Р' => 'д-р',
+
 	};
 
 	for my $abbr_key ( keys %{$abbrs} ) {	
-               my $abbr_value = $abbrs->{$abbr_key};
-	       $input_value =~ s/$input_value/$abbr_value/g;
-        }
+		my $abbr_value = $abbrs->{$abbr_key};
+		#say "about to replase[$abbr_key] to [$abbr_value]";
+		$input_value =~ s/\Q$abbr_key\E/$abbr_value/gi;
+	}
 
-   return $input_value;
+	#say "result of abriviation() [$input_value]";
+	return $input_value;
 
 }
 
@@ -155,80 +215,24 @@ sub unification {
 #####################
 	my $input_value = shift;
 	my $uni_list  = {
-		#Алекдандер Стамболиики 
-		qr/Алек.*?Стамб/ => 1,
-        };
+		'Алек.*?Стамб[^\s]*' => 'Александър Стамболийски',
+		'Нико.*?Миха[^\s]*' => 'Никола Михайловски',
+		'първа(\s|$)' => '1-ва',
+		'втора(\s|$)' => '2-ра',
+		'трета(\s|$)' => '3-та',
+	};
 
-	for my $uni_key ( keys %{$uni_list} ){
 
-		if ( $input_value =~ /$uni_key/i ){
-		     $input_value =~ s/$input_value/$uni_key/g;
-		     last;
-		}
+	for my $abbr_key ( keys %{$uni_list} ) {	
+		my $abbr_value = $uni_list->{$abbr_key};
+		#say "input_value[$input_value] about to replase[$abbr_key] to [$abbr_value]";
+		$input_value =~ s/$abbr_key/$abbr_value/i;
 	}
-	
+
 	return $input_value;
 
 }
 
-########################
-sub write_down { 
-########################
-	my $file = shift;
-	my $sheet_name = shift;
-	my $new_excel_data = shift;
-	say "show entire data" . Dumper $new_excel_data;	
-	
-
-	my $workbook = Excel::Writer::XLSX->new( $file );
-
-        # Add a worksheet
-	my $worksheet = $workbook->add_worksheet($sheet_name);
-
-        #  Add and define a format
-	#$format = $workbook->add_format();
-	#$format->set_bold();
-	#$format->set_color( 'red' );
-	#$format->set_align( 'center' );
-
-        # Write a formatted and unformatted string, row and column notation.
-#my $result = {  1 => {
-#	          old_value =>'iasdasd', 
-#		  new_value => "asdasd123123" ,
-#		  id => '123123', 
-#		  row_num => '1',
-#		  col_num => '2'
-#                 }, 
-#             };
-
-		
-		$worksheet->write( 0 , 0 , "ID" );
-		$worksheet->write( 0 , 1 , "OLD_VALUE" );
-		$worksheet->write( 0 , 2 , "NEW_VALUE" );
-
-	for my $row_in ( %{$new_excel_data} ) {
-		next if ref $row_in; 	
-		my $row = $new_excel_data->{$row_in}{row_num};
-		my $col = $new_excel_data->{$row_in}{col_num};
-		my $new_value = $new_excel_data->{$row_in}{new_value};
-		my $id = $new_excel_data->{$row_in}{id};
-		my $old_value = $new_excel_data->{$row_in}{old_value};
-		say "In write_down() row_in[$row_in] row[$row] col[$col] new_value[$new_value]";
-	
-		#ID
-		$worksheet->write( $row, 0, $id );
-		#OLD_value
-		$worksheet->write( $row, 1, $old_value );
-		#nEW_value	
-		$worksheet->write( $row, $col, $new_value );
-	}	
-
-        # Write a number and a formula using A1 notation
-	#$worksheet->write( 'A3', 1.2345 );
-	#$worksheet->write( 'A4', '=SIN(PI()/4)' );
-
-	$workbook->close();
-}
 
 
 
