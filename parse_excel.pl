@@ -14,20 +14,20 @@ my $file = $ARGV[0];
 
 
 #TODO:
-# mapping colums to be processed in same functions as general file
-# do lc
-# reorder mapping to be alphabetic style
+# Fast main excel file ( skip useless cols )
+# fork if is too slow
+# uncomment case() maybe
+# make id column to be in global variable
 
 my $mapping = read_map( $ARGV[1] );
-die Dumper $mapping;
 
 confess "You must give an file name as first parameter" unless $file;
 
 my $result_data = {};
 my $result_file = "Result.xlsx";
 my $result_sheet_name = 'Result';
-my $rows_to_proces = 243;
-my $column_to_read = 8;
+my $rows_to_proces = 500;
+my $column_to_read = 3;
 
 ############
 my $parser =   Spreadsheet::ParseXLSX->new();
@@ -65,13 +65,10 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 				  my $initial_string = $val;
 				  my ($uni_count, $abbr_count );
 
-				  $val = trim($val);
-				  $val = rem_spaces($val);
-				  #$val = case($val);
+				  my $func_result = func_calls( $val );
+				  $val = $func_result->{value};
 
-				  ($val, $abbr_count ) = abriviation2($val);
-				  #($val, $abbr_count ) = abriviation($val);
-				  ($val, $uni_count ) = unification($val);
+	                          ($val, $uni_count ) = unification($val, $mapping);
 				
 				  say "[$initial_string] ---> [$val]";
 
@@ -79,8 +76,8 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 				  $result_data->{$row}{old_value} = $old_value;
 				  $result_data->{$row}{row_num} = $row + 1;
 				  $result_data->{$row}{col_num} = 2;
-				  $result_data->{$row}{abbr} = $abbr_count;
-				  $result_data->{$row}{uni} = $uni_count;
+				  $result_data->{$row}{abbr} = $func_result->{abbr_count};
+				  $result_data->{$row}{uni} = $func_result->{uni_count};
 
 			  }
 
@@ -95,6 +92,29 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 }
 say "\nAbout to write data in file[$result_file] with sheet[$result_sheet_name]\n";
 write_down( $result_file, $result_sheet_name , $result_data );
+
+
+##################
+sub func_calls {
+##################
+	my $val = shift;
+	my ($abbr_count, $uni_count );
+	my $result = {};
+
+	$val = lc( $val );
+	$val = trim($val);
+	$val = rem_spaces($val);
+        #$val = case($val);
+
+	($val, $abbr_count ) = abriviation($val);
+
+	$result->{value} = $val;
+	$result->{uni_count} = $uni_count;
+	$result->{abbr_count} = $abbr_count;
+
+	return $result;
+
+}
 
 ################
 sub write_down { 
@@ -173,7 +193,7 @@ sub case {
 
 
 #################
-sub abriviation2 {
+sub abriviation {
 #################
 	my $input_value  = shift;
 	my $matched;
@@ -236,86 +256,31 @@ sub abriviation2 {
 }
 
 #################
-sub abriviation {
-#################
-	my $input_value  = shift;
-	my $matched;
-	my $abbrs = {
-		'- ' => '-',
-		' -' => '-',
-		' - ' => '-',
-		'-Т' => '-т',
-		'-Р' => '-р',
-		'-В' => '-в',
-		'-М' => '-м',
-		' И ' => ' и ',
-		'Ii' => 'II',
-		'Iii' => 'III',
-		'Академик' => 'акад.',
-		'Архитект' => 'арх.',
-		'Генерал' => 'ген.',
-		'Доктор' => 'д-р',
-		'Доцент' => 'доц.',
-		'Инженер' => 'инж.',
-		'Капитан' => 'к-н.',
-		'Майор' => 'м-р',
-		'Лейтенант' => 'лейт.',
-		'Подполковник' => 'подпл.',
-		'Подпоручик' => 'подпр.',
-		'Полковник' => 'полк.',
-		'Поручик' => 'прк.',
-		'Професор' => 'проф.',
-		'Акад.' => 'акад.',
-		'Арх.' => 'арх.',
-		'Ген.' => 'ген.',
-		'Доц.' => 'доц.',
-		'Инж.' => 'инж.',
-		'Кап.' => 'к-н.',
-		'М-Р' => 'м-р',
-		'Лейт.' => 'лейт.',
-		'Подпл.' => 'подпл.',
-		'Подпр.' => 'подпр.',
-		'Полк.' => 'полк.',
-		'Прк.' => 'прк.',
-		'Проф.' => 'проф.',
-		'Д-Р' => 'д-р',
-	};
-	
-	for my $abbr_key ( keys %{$abbrs} ) {	
-		my $abbr_value = $abbrs->{$abbr_key};
-		#say "about to replase[$abbr_key] to [$abbr_value]";
-		if ($input_value =~ /\Q$abbr_key\E/i ) {
-			$matched++;
-		}
-		$input_value =~ s/\Q$abbr_key\E/$abbr_value/gi;
-	}
-	#say "result of abriviation() [$input_value] matched[$matched]";
-	return $input_value, $matched;
-}
-#################
 sub unification {
 #################
 	my $input_value = shift;
+	my $mapping = shift;
+	
+	my $new_value;
 	my $matched;
-	my $uni_list  = {
-		'Алек.*?Стамб[^\s]*' => 'Александър Стамболийски',
-		'Нико.*?Миха[^\s]*' => 'Никола Михайловски',
-		'първа(\s|$)' => '1-ва',
-		'втора(\s|$)' => '2-ра',
-		'трета(\s|$)' => '3-та',
-		'1(\s|$)' => '1-ва',
-	};
 
-	for my $abbr_key ( keys %{$uni_list} ) {	
-		my $abbr_value = $uni_list->{$abbr_key};
-		#say "input_value[$input_value] about to replase[$abbr_key] to [$abbr_value]";
-		if ( $input_value =~ /$abbr_key/i ) {
+	for my $row_num ( sort {  ncmp( $a,  $b) } keys %{$mapping} ) {
+
+		my @key_value =  keys %{$mapping->{$row_num}};
+		my $old_value = $key_value[0];
+		my $to_be = $mapping->{$row_num}->{$old_value};
+	#	say "input_Value[$input_value] will be compared with [$old_value]"; 
+
+		if ( $input_value eq $old_value ) {
 			$matched++;
+		      	$new_value = $to_be;
+			say "Input_value[$input_value] has matched with old_value[$old_value] and will became[$to_be]";
+			last;
 		}
 
-		$input_value =~ s/$abbr_key/$abbr_value/i;
 	}
-	return $input_value, $matched;
+
+	return $new_value, $matched;
 }
 
 
@@ -325,6 +290,9 @@ sub read_map {
 	my $excel_file = shift;
 	my $result_data;
 
+	say "#################################";
+	say "Parsing file mapping[$excel_file]";
+	say "#################################";
 	my $parser =   Spreadsheet::ParseXLSX->new();
 	my $workbook = $parser->parse($excel_file);
 
@@ -348,9 +316,9 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 			  }		
 
 			  if ($col eq '0' ) {
-				  $result_key = $cell_value;
+				  my $result_call = func_calls($cell_value);
+				  $result_key = $result_call->{value};
 			  }
-
 
 			  if ($col eq '1' ) {
 				  $result_value = $cell_value;
@@ -359,7 +327,7 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 
 		  }
 		  $result_data->{$row} = { $result_key => $result_value };
-		  #say "column_read[\$col] row[$row] key[$result_key] value[$result_value] ";
+		  #say "row[$row] key[$result_key] value[$result_value] ";
 	  }
 	}
 
