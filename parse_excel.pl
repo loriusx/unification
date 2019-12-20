@@ -9,9 +9,12 @@ use Excel::Writer::XLSX;
 use utf8;
 use open ':std', ':encoding(UTF-8)';
 use Sort::Naturally qw(ncmp);
+use Getopt::Long qw(GetOptionsFromArray);
+Getopt::Long::Configure qw(ignorecase_always permute);
 
-my $file = $ARGV[0];
-
+my $data   = "file.dat";
+my $length = 24;
+my $verbose;
 
 #TODO:
 # Fast main excel file ( skip useless cols )
@@ -19,14 +22,27 @@ my $file = $ARGV[0];
 # uncomment case() maybe
 # make id column to be in global variable
 
-my $mapping = read_map( $ARGV[1] );
 
-confess "You must give an file name as first parameter" unless $file;
+my $Options = _makeOptionsFromArray( @ARGV );
+
+my $file = $Options->{data_file};
+my $criteria_file = $Options->{criteria_file};
+my $rows_to_proces = $Options->{rows_to_proces};
+
+
+for my $manda_arg ( qw(data_file criteria_file ) ) {
+	unless ($Options->{$manda_arg} ) {
+		confess "Mandatory argument[$manda_arg] is missing for $0";
+	}
+
+}
+
+
+my $mapping = read_map( $criteria_file );
 
 my $result_data = {};
-my $result_file = "Result.xlsx";
+my $result_file = $Options->{result_file} || "Result.xlsx";
 my $result_sheet_name = 'Result';
-my $rows_to_proces = 500;
 my $column_to_read = 3;
 
 ############
@@ -62,15 +78,18 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 				  my $val = $cell->value();
 				  my $old_value = $val;
 				  #say "before func[$val]";
-				  my $initial_string = $val;
 				  my ($uni_count, $abbr_count );
 
 				  my $func_result = func_calls( $val );
 				  $val = $func_result->{value};
 
-	                          ($val, $uni_count ) = unification($val, $mapping);
-				
-				  say "[$initial_string] ---> [$val]";
+	                          my $crit_val = do_criteria($val, $mapping);
+					
+                                  if ($crit_val) {
+				     $val = $crit_val;				  
+				  }
+
+				  say "[$old_value] ---> [$val]";
 
 				  $result_data->{$row}{new_value} = $val;
 				  $result_data->{$row}{old_value} = $old_value;
@@ -91,6 +110,8 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 	  }
 }
 say "\nAbout to write data in file[$result_file] with sheet[$result_sheet_name]\n";
+
+
 write_down( $result_file, $result_sheet_name , $result_data );
 
 
@@ -104,7 +125,8 @@ sub func_calls {
 	$val = lc( $val );
 	$val = trim($val);
 	$val = rem_spaces($val);
-        #$val = case($val);
+	$val =~ s/\./\. /g;
+        $val = case($val);
 
 	($val, $abbr_count ) = abriviation($val);
 
@@ -148,7 +170,7 @@ sub write_down {
 	#say "In write_down() row_in[$row_in] row[$row] col[$col] new_value[$new_value]";
 
 		#ID
-		$worksheet->write( $row , 0, $id );
+		$worksheet->write( $row, 0, $id );
 		#OLD_value
 		$worksheet->write( $row, 1, $old_value );
 		#nEW_value	
@@ -256,31 +278,30 @@ sub abriviation {
 }
 
 #################
-sub unification {
+sub do_criteria {
 #################
 	my $input_value = shift;
 	my $mapping = shift;
 	
 	my $new_value;
-	my $matched;
 
 	for my $row_num ( sort {  ncmp( $a,  $b) } keys %{$mapping} ) {
 
 		my @key_value =  keys %{$mapping->{$row_num}};
 		my $old_value = $key_value[0];
 		my $to_be = $mapping->{$row_num}->{$old_value};
+		next unless $to_be;
 	#	say "input_Value[$input_value] will be compared with [$old_value]"; 
 
 		if ( $input_value eq $old_value ) {
-			$matched++;
-		      	$new_value = $to_be;
+			$new_value = $to_be;
 			say "Input_value[$input_value] has matched with old_value[$old_value] and will became[$to_be]";
 			last;
 		}
 
 	}
 
-	return $new_value, $matched;
+	return $new_value
 }
 
 
@@ -335,4 +356,36 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 
 }
 
+##################################
+sub _makeOptionsFromArray {
+##################################
+    my @Options_array = @_;
+    my $Options       = {};
+
+    if ($Options_array[0] and $Options_array[0] !~ /^--?/ ){ #prevent user mistake
+        confess "Error: Wrong argv. First \@ARGV argumet must start with single or double dash -|-- false arg[$Options_array[0]";
+    }
+
+    if (!@Options_array) {
+	    print "$0: Argument required --data-file <file_path> and --criteria-file <file_path>.\n";
+	    exit 1;
+    }
+
+    GetOptionsFromArray(
+        \@Options_array,
+		"data-file=s"   => \$Options->{data_file}, 
+		"criteria-file=s"   => \$Options->{criteria_file},
+		"rows-process=i"    => \$Options->{rows_to_proces},
+                "result-file=s"    => \$Options->{result_file},
+		"help"    => \$Options->{help},
+
+    ) or confess( "Err: command line arguments are wrong\n" );
+
+    if ( $Options->{ help } ) {
+        print "$0: Argument required --data-file <file_path> and --criteria-file <file_path>.\n";
+        exit 0;
+    }
+
+    return $Options;
+}
 
