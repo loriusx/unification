@@ -11,6 +11,9 @@ use open ':std', ':encoding(UTF-8)';
 use Sort::Naturally qw(ncmp);
 use Getopt::Long qw(GetOptionsFromArray);
 Getopt::Long::Configure qw(ignorecase_always permute);
+use POSIX 'strftime';
+
+
 
 my $data   = "file.dat";
 my $length = 24;
@@ -23,6 +26,7 @@ my $verbose;
 # make id column to be in global variable
 
 
+my $start_time = &time_;
 my $Options = _makeOptionsFromArray( @ARGV );
 
 my $file = $Options->{data_file};
@@ -109,11 +113,15 @@ ROW_NUM:  for my $row ( $row_min .. $row_max ) {
 		  }
 	  }
 }
+
 say "\nAbout to write data in file[$result_file] with sheet[$result_sheet_name]\n";
 
 
 write_down( $result_file, $result_sheet_name , $result_data );
 
+my $end_time = &time_;
+
+say "start script time[$start_time] end time[$end_time]";
 
 ##################
 sub func_calls {
@@ -277,7 +285,8 @@ sub abriviation {
 	#say "result of abriviation() [$input_value] matched[$matched]";
 	return $input_value, $matched;
 }
-
+#NOTE sort may slow the process
+#
 #################
 sub do_criteria {
 #################
@@ -286,7 +295,8 @@ sub do_criteria {
 	
 	my $new_value;
 
-	for my $row_num ( sort {  ncmp( $a,  $b) } keys %{$mapping} ) {
+	#for my $row_num ( sort {  ncmp( $a,  $b) } keys %{$mapping} ) {
+	for my $row_num (  keys %{$mapping} ) {
 
 		my @key_value =  keys %{$mapping->{$row_num}};
 		my $old_value = $key_value[0];
@@ -390,3 +400,9 @@ sub _makeOptionsFromArray {
     return $Options;
 }
 
+################
+sub time_ {
+################
+	my $time = strftime('%T', localtime);
+	return $time;
+}
