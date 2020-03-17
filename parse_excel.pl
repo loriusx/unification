@@ -300,14 +300,16 @@ sub abriviation {
 		'69' => {	' Километър' => ' километър',},
 		'70' => {	' Конгрес' => ' конгрес',},
 		'71' => {	' Долина' => ' долина',},
+		'72' => { 	' Планина' => ' планина',},
+		'73' => {	' Извор' => ' извор',},
 
 	};	
 	for my $abbr_key ( sort {  ncmp( $a,  $b) } keys %{$abbrs} ) {	
-		say "show me abbr_key[$abbr_key]";
+		#say "show me abbr_key[$abbr_key]";
 		my @key_value =  keys %{$abbrs->{$abbr_key}};
 		my $map_key = $key_value[0];
 		my $map_result = $abbrs->{$abbr_key}->{$map_key};
-		say "abr_key[$abbr_key] key[$map_key] map_result[$map_result]";
+		#say "abr_key[$abbr_key] key[$map_key] map_result[$map_result]";
 
 		if ($input_value =~ /\Q$map_key\E/i ) {
 			$matched++;
